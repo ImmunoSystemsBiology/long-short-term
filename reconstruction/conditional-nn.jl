@@ -1,9 +1,9 @@
 using JLD2, SimpleChains, ComponentArrays, Optimization, OptimizationOptimJL, OptimizationOptimisers, Zygote, ProgressMeter,LineSearches
-
+using Colors, CairoMakie
 using UMAP
 
 # load data
-MIR_parameters, LIR_parameters, healthy_parameters = jldopen("data/mir_lir_simulations_final.jld2", "r") do file
+MIR_parameters, LIR_parameters, healthy_parameters = jldopen("data/parameter_trajectories.jld2", "r") do file
     file["MIR_parameters"], file["LIR_parameters"], file["healthy_parameters"]
 end
 
@@ -26,12 +26,13 @@ function loss_nn(p, (chain, y, t))
         for (i, time) in enumerate(t)
             input = vcat(conditionals[individual], [time])
             pred = chain(input, p.network)
-            loss += sum(abs2, pred - y[:, individual, i]) ./ y[1, individual, i] # relative error
+            loss += sum(abs2, pred - y[:, individual, i])
         end
     end
+    loss /= (size(y, 2) * size(y, 3))
+     
     return loss
 end
-
 total_parameters = cat(MIR_parameters, LIR_parameters, healthy_parameters; dims=2)
 trajectory_parameters = total_parameters[1:3,:,:]
 
@@ -60,7 +61,7 @@ for i in 1:25
     try 
         optfunc = OptimizationFunction(loss_nn, Optimization.AutoZygote())
         optprob = OptimizationProblem(optfunc, initial_params, (chain, trajectory_parameters, timepoints))
-        sol = solve(optprob, ADAM(1e-2), maxiters=3000, callback=create_progress_callback(3000))
+        sol = solve(optprob, ADAM(1e-3), maxiters=1000, callback=create_progress_callback(1000))
 
         optprob_2 = OptimizationProblem(optfunc, sol.u, (chain, trajectory_parameters, timepoints))
         sol_2 = solve(optprob_2, Optim.LBFGS(linesearch=BackTracking()), maxiters=2000, callback=create_progress_callback(2000))
@@ -72,7 +73,7 @@ for i in 1:25
 end
 
 conditionals = hcat([sol.u.conditionals for sol in neural_network_solutions]...)
-umap_result = UMAP.fit(conditionals', 2; n_neighbors=25, min_dist=0.8)
+umap_result = UMAP.fit(conditionals', 2; n_neighbors=25, min_dist=2.5)
 umap_result.embedding
 
 figure_umap = let f = Figure()
@@ -86,29 +87,38 @@ figure_umap = let f = Figure()
         if i <= size(MIR_parameters, 2)
             color = mir_color
             label = "MIR"
+            marker = :circle
         elseif i <= size(MIR_parameters, 2) + size(LIR_parameters, 2)
             color = lir_color
             label = "LIR"
+            marker = :utriangle
         else
             color = healthy_color
             label = "Healthy"
+            marker = :diamond
         end
-        scatter!(ax, [umap_result.embedding[i][1]], [umap_result.embedding[i][2]], color=color, label=label, markersize=12, strokecolor=:black, strokewidth=0.9)
+        scatter!(ax, [umap_result.embedding[i][1]], [umap_result.embedding[i][2]], color=color, label=label, markersize=18, strokecolor=:black, strokewidth=0.9, marker=marker)
     end
 
     axislegend(ax; position=:rt, merge=true)
     f
 end
 
+save("figures/conditional_parameters_umap_nn.png", figure_umap)
+
 using CairoMakie
 
+# save the conditional parameters to a JLD2 file
+jldsave("data/conditional_parameters_nn.jld2", conditionals=conditionals)
 
+# test the reliability of class separation based on conditional parameters
 
 # visualize the results
-conditional_parameters = sol_2.u.conditionals
+conditional_parameters = conditionals[:,17]
 
 figure_conditional_parameters = let f = Figure()
-    ax = CairoMakie.Axis(f[1, 1], xlabel="Group", ylabel="Conditional parameter value", title="Conditional parameters")
+    ax = CairoMakie.Axis(f[1, 1], xlabel="Group", ylabel="Conditional parameter value", title="Conditional parameters",
+    xticks=([1, 2, 3], ["MIR", "LIR", "Healthy"]))
 
     group_labels = ["MIR", "LIR", "Healthy"]
     group_positions = [1, 2, 3]
@@ -120,14 +130,38 @@ figure_conditional_parameters = let f = Figure()
     boxplot!(ax, fill(1, size(MIR_parameters, 2)), conditional_parameters[1:size(MIR_parameters, 2)], color=mir_color, label="MIR", markersize=8)
     boxplot!(ax, fill(2, size(LIR_parameters, 2)), conditional_parameters[size(MIR_parameters, 2)+1:size(MIR_parameters, 2)+size(LIR_parameters, 2)], color=lir_color, label="LIR", markersize=8)
     boxplot!(ax, fill(3, size(healthy_parameters, 2)), conditional_parameters[size(MIR_parameters, 2)+size(LIR_parameters, 2)+1:end], color=healthy_color, label="Healthy", markersize=8)
-
+    
     f
 end
 
-figure_reconstruction = let f = Figure()
-    ax1 = CairoMakie.Axis(f[1, 1], xlabel="Time (min)", ylabel="Value", title="Reconstruction of trajectories")
-    ax2 = CairoMakie.Axis(f[2, 1], xlabel="Time (min)", ylabel="Value", title="Reconstruction of trajectories")
-    ax3 = CairoMakie.Axis(f[3, 1], xlabel="Time (min)", ylabel="Value", title="Reconstruction of trajectories")
+save("figures/conditional_parameters_boxplot_nn_good_separation.png", figure_conditional_parameters)
+
+conditional_parameters = conditionals[:,7]
+
+figure_conditional_parameters = let f = Figure()
+    ax = CairoMakie.Axis(f[1, 1], xlabel="Group", ylabel="Conditional parameter value", title="Conditional parameters",
+    xticks=([1, 2, 3], ["MIR", "LIR", "Healthy"]))
+
+    group_labels = ["MIR", "LIR", "Healthy"]
+    group_positions = [1, 2, 3]
+
+    lir_color = colorant"#c74300"
+    mir_color = colorant"#008aa1"
+    healthy_color = colorant"#5c8a73"
+
+    boxplot!(ax, fill(1, size(MIR_parameters, 2)), conditional_parameters[1:size(MIR_parameters, 2)], color=mir_color, label="MIR", markersize=8)
+    boxplot!(ax, fill(2, size(LIR_parameters, 2)), conditional_parameters[size(MIR_parameters, 2)+1:size(MIR_parameters, 2)+size(LIR_parameters, 2)], color=lir_color, label="LIR", markersize=8)
+    boxplot!(ax, fill(3, size(healthy_parameters, 2)), conditional_parameters[size(MIR_parameters, 2)+size(LIR_parameters, 2)+1:end], color=healthy_color, label="Healthy", markersize=8)
+    
+    f
+end
+
+save("figures/conditional_parameters_boxplot_nn_bad_separation.png", figure_conditional_parameters)
+
+figure_reconstruction = let f = Figure(size=(500, 600))
+    ax1 = CairoMakie.Axis(f[1, 1], xlabel="Time (min)", ylabel="Value")
+    ax2 = CairoMakie.Axis(f[2, 1], xlabel="Time (min)", ylabel="Value")
+    ax3 = CairoMakie.Axis(f[3, 1], xlabel="Time (min)", ylabel="Value")
 
     group_labels = ["MIR", "LIR", "Healthy"]
     group_positions = [1, 2, 3]
@@ -137,7 +171,7 @@ figure_reconstruction = let f = Figure()
     healthy_color = colorant"#5c8a73"
 
     timepoints_fine = range(0, stop=30, length=100)
-    for sol_2 in neural_network_solutions
+    for sol_2 in neural_network_solutions[[10]]
         conditional_parameters = sol_2.u.conditionals
         for (i, individual) in enumerate(1:size(trajectory_parameters, 2))
             condition = conditional_parameters[i]
@@ -168,9 +202,11 @@ figure_reconstruction = let f = Figure()
 
         end
     end
-
+    Legend(f[1:3,2], ax1; orientation=:vertical, merge=true)
     # axislegend(ax1; position=:rt, merge=true)
     # axislegend(ax2; position=:rt, merge=true)
     # axislegend(ax3; position=:rt, merge=true)
     f
 end
+
+save("figures/reconstruction_conditional_nn.png", figure_reconstruction)

@@ -1,8 +1,8 @@
 using JLD2, OrdinaryDiffEq, Random, QuasiMonteCarlo, Optimization, OptimizationOptimJL, Distributions, LineSearches, ProgressMeter, Statistics
 include("../edes_model.jl")
-
+using Colors, CairoMakie
 # Load in the data
-MIR_patients, LIR_patients, healthy_patients = jldopen("data/mir_lir_simulations_final.jld2", "r") do file
+MIR_patients, LIR_patients, healthy_patients = jldopen("data/mir_lir_simulations.jld2", "r") do file
     (file["MIR_patients"], file["LIR_patients"], file["healthy_patients"])
 end
 
@@ -33,7 +33,7 @@ function loglikelihood(parameters, (patient, model, Dmeal))
 end
 
 function fit_edes(patient::NamedTuple, Dmeal = 75000.0; 
-    lower_bounds = fill(-10.0, 5), upper_bounds = fill(3.0, 5), n_initial_samples = 1000, 
+    lower_bounds = fill(-10.0, 5), upper_bounds = fill(2.0, 5), n_initial_samples = 1000, 
     n_optimizations = 20)
     bw = patient.bw
     Gb = patient.glucose[1]
@@ -219,7 +219,9 @@ end
 
 jldsave("data/parameter_trajectories.jld2", MIR_parameters=MIR_parameters, LIR_parameters=LIR_parameters, healthy_parameters=healthy_parameters)
 
-
+MIR_parameters, LIR_parameters, healthy_parameters = jldopen("data/parameter_trajectories.jld2", "r") do file
+    file["MIR_parameters"], file["LIR_parameters"], file["healthy_parameters"]
+end
 figure_parameter_trajectories = let f = Figure(size=(350,600), fonts=(;bold = "Noto Sans SemiBold", default="Noto Sans Light"))
 
 
@@ -227,12 +229,12 @@ figure_parameter_trajectories = let f = Figure(size=(350,600), fonts=(;bold = "N
     mir_color = colorant"#008aa1"
     healthy_color = colorant"#5c8a73"
 
-    lir_color = mir_color = healthy_color = colorant"#808080"
+    #lir_color = mir_color = healthy_color = colorant"#808080"
 
     ax_k1 = Axis(f[1, 1], xlabel = "Time (days)", ylabel = "k1", title = "Parameter trajectories", titlealign = :left, subtitle = "k₁ trajectory", titlesize=16)
     ax_k5 = Axis(f[2, 1], xlabel = "Time (days)", ylabel = "k5", titlealign = :left, subtitle = "k₅ trajectory")
     ax_k6 = Axis(f[3, 1], xlabel = "Time (days)", ylabel = "k6", titlealign = :left, subtitle = "k₆ trajectory")
-
+    limits!(ax_k1, 0, 30, 0, 0.05)
 
     mean_k1_MIR = mean(MIR_parameters[1, :, :], dims=1)
     mean_k5_MIR = mean(MIR_parameters[2, :, :], dims=1)
@@ -264,17 +266,17 @@ figure_parameter_trajectories = let f = Figure(size=(350,600), fonts=(;bold = "N
         lines!(ax_k6, days, healthy_parameters[3, i, :], color = healthy_color, alpha=0.08)
     end
 
-    # lines!(ax_k1, days, mean_k1_MIR[:], color = mir_color, linewidth=3, label="Muscle")
-    # lines!(ax_k5, days, mean_k5_MIR[:], color = mir_color, linewidth=3)
-    # lines!(ax_k6, days, mean_k6_MIR[:], color = mir_color, linewidth=3)
+    lines!(ax_k1, days, mean_k1_MIR[:], color = mir_color, linewidth=3, label="Muscle")
+    lines!(ax_k5, days, mean_k5_MIR[:], color = mir_color, linewidth=3)
+    lines!(ax_k6, days, mean_k6_MIR[:], color = mir_color, linewidth=3)
 
-    # lines!(ax_k1, days, mean_k1_LIR[:], color = lir_color, linewidth=3, label="Liver")
-    # lines!(ax_k5, days, mean_k5_LIR[:], color = lir_color, linewidth=3)
-    # lines!(ax_k6, days, mean_k6_LIR[:], color = lir_color, linewidth=3)
+    lines!(ax_k1, days, mean_k1_LIR[:], color = lir_color, linewidth=3, label="Liver")
+    lines!(ax_k5, days, mean_k5_LIR[:], color = lir_color, linewidth=3)
+    lines!(ax_k6, days, mean_k6_LIR[:], color = lir_color, linewidth=3)
 
-    # lines!(ax_k1, days, mean_k1_healthy[:], color = healthy_color, linewidth=3, label="Healthy")
-    # lines!(ax_k5, days, mean_k5_healthy[:], color = healthy_color, linewidth=3)
-    # lines!(ax_k6, days, mean_k6_healthy[:], color = healthy_color, linewidth=3)
+    lines!(ax_k1, days, mean_k1_healthy[:], color = healthy_color, linewidth=3, label="Healthy")
+    lines!(ax_k5, days, mean_k5_healthy[:], color = healthy_color, linewidth=3)
+    lines!(ax_k6, days, mean_k6_healthy[:], color = healthy_color, linewidth=3)
 
     #Legend(f[4,1], ax_k1, "Insulin Resistance"; orientation = :horizontal)
 

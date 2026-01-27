@@ -1,7 +1,7 @@
 using JLD2, DataFrames, TemporalMixtureModels, CairoMakie, Statistics, Random, ProgressMeter
 
 # load data
-MIR_parameters, LIR_parameters, healthy_parameters = jldopen("data/parameter_trajectories_final.jld2", "r") do file
+MIR_parameters, LIR_parameters, healthy_parameters = jldopen("data/parameter_trajectories.jld2", "r") do file
     file["MIR_parameters"], file["LIR_parameters"], file["healthy_parameters"]
 end
 
@@ -14,28 +14,28 @@ k5s = Float64[]
 k6s = Float64[]
 times = Float64[]
 
-for (individual, time) in Iterators.product(1:size(MIR_parameters, 2), 1:length(timepoints))
+for (individual, time) in Iterators.product(1:size(MIR_parameters, 2), 1:length(timepoints_og))
     push!(ids, individual)
     push!(k1s, MIR_parameters[1, individual, time])
     push!(k5s, MIR_parameters[2, individual, time])
     push!(k6s, MIR_parameters[3, individual, time])
-    push!(times, timepoints[time])
+    push!(times, timepoints_og[time])
 end
 
-for (individual, time) in Iterators.product(1:size(LIR_parameters, 2), 1:length(timepoints))
+for (individual, time) in Iterators.product(1:size(LIR_parameters, 2), 1:length(timepoints_og))
     push!(ids, individual + size(MIR_parameters, 2))
     push!(k1s, LIR_parameters[1, individual, time])
     push!(k5s, LIR_parameters[2, individual, time])
     push!(k6s, LIR_parameters[3, individual, time])
-    push!(times, timepoints[time])
+    push!(times, timepoints_og[time])
 end
 
-for (individual, time) in Iterators.product(1:size(healthy_parameters, 2), 1:length(timepoints))
+for (individual, time) in Iterators.product(1:size(healthy_parameters, 2), 1:length(timepoints_og))
     push!(ids, individual + size(MIR_parameters, 2) + size(LIR_parameters, 2))
     push!(k1s, healthy_parameters[1, individual, time])
     push!(k5s, healthy_parameters[2, individual, time])
     push!(k6s, healthy_parameters[3, individual, time])
-    push!(times, timepoints[time])
+    push!(times, timepoints_og[time])
 end
 
 parameters = hcat(k1s, k5s, k6s)
@@ -93,7 +93,7 @@ function cross_validate(ids, t, y, n_folds, possible_n_components, possible_orde
     return results
 end
 
-cv_results = cross_validate(ids, times, parameters, 5, possible_n_components, possible_orders, n_repeats=10, n_refits=10)
+cv_results = cross_validate(ids, times, parameters, 10, possible_n_components, possible_orders, n_repeats=10, n_refits=10)
 
 figure_cv = let f = Figure()
 
@@ -123,56 +123,43 @@ figure_cv = let f = Figure()
 
 end
 
+save("figures/mixture_model_cv_bic.png", figure_cv)
 
-n_bootstrap = 100  # Number of bootstrap samples
-confidence_intervals, _, _ = bootstrap_ci(model, input_data; n_bootstrap=n_bootstrap)
-# Create a range of time points for prediction
-t_pred = -1.0:0.01:1.0
+# fit final model on all data with best parameters (3 components, order 1)
+best_n_components = 3
+best_order = 1
 
-# get cluster assignments
-assignments = [x[2] for x in argmax(TemporalMixtureModels.posterior_responsibilities(model, input_data), dims=2)[:]]
-
-figure_mixture = let f = Figure(size=(1200, 400))
-
-    # Plot the fitted component models
-    predictions = predict(model, t_pred)
-
-    COMPONENT_COLORS = [colorant"#c74300", colorant"#008aa1", colorant"#00c743"]
-    assignments_per_timepoints = repeat(assignments, inner=6) # each individual has 3 timepoints
-    assignment_colors = [COMPONENT_COLORS[assignments_per_timepoints[i]] for i in 1:length(assignments_per_timepoints)]
-    println(assignments_per_timepoints)
-    for (axi, variable) in enumerate([:k1, :k5, :k6])
-        ax = Axis(f[1, axi], xlabel="Time", ylabel="Value", title="variable: $variable")
-        # Plot the original data points
-        scatter!(ax, input_data[input_data[!,:var_name] .== String(variable),:time], input_data[input_data[!,:var_name] .== String(variable),:value]; color=assignment_colors, markersize=5, label="Data - $variable")
-        # orders = [2,3,1]
-        for k in axes(predictions[variable], 2)
-            lines!(ax, t_pred, predictions[variable][:, k];
-            label="Component $k - $variable", color=COMPONENT_COLORS[k], linewidth=2)
-
-            # get the confidence bounds. This is still a bit clunky because there is no API for this yet
-            lower_bound_parameters = confidence_intervals[k][variable][:lower]
-            upper_bound_parameters = confidence_intervals[k][variable][:upper]
-
-            model_lb = PolynomialRegression(length(lower_bound_parameters)-1, lower_bound_parameters)
-            model_ub = PolynomialRegression(length(upper_bound_parameters)-1, upper_bound_parameters)
-
-            y_lower = predict(model_lb, t_pred)
-            y_upper = predict(model_ub, t_pred)
-
-            println(lower_bound_parameters)
-
-            # Plot the confidence intervals as shaded areas
-            lines!(ax, t_pred, y_lower; color=(COMPONENT_COLORS[k], 0.8), linestyle=:dash, label="")
-            lines!(ax, t_pred, y_upper; color=(COMPONENT_COLORS[k], 0.8), linestyle=:dash, label="")
-            band!(ax, t_pred, y_lower, y_upper;
-            color=(COMPONENT_COLORS[k], 0.05), label="Component $k - $variable")
-
-        end
-    end
-
-    f
+component_model = @component begin
+    y[1] ~ PolynomialRegression(best_order)
+    y[2] ~ PolynomialRegression(best_order)
+    y[3] ~ PolynomialRegression(best_order)
 end
+
+model = fit_mixture(component_model, best_n_components, times, parameters, ids; n_repeats=10, max_iter=1000, verbose=true)
+# get cluster assignments
+assignments = argmax(posterior_responsibilities(model, times, parameters, ids), dims=2)
+assignments = [a[1][2] for a in eachrow(assignments)]
+
+t_pred = range(0, stop=30, length=100)
+
+# # plot final results
+# figure_final = let f = Figure(size=(700, 300))
+#     ax = CairoMakie.Axis(f[1,1], xlabel="Time (min)", ylabel="k1", title="Mixture Model Reconstruction")
+#     limits!(ax, 0, 30, 0, 0.05)
+#     ax2 = CairoMakie.Axis(f[1,2], xlabel="Time (min)", ylabel="k5")
+#     ax3 = CairoMakie.Axis(f[1,3], xlabel="Time (min)", ylabel="k6")
+#     colors = [colorant"#008aa1", colorant"#c74300", colorant"#5c8a73"]
+#     for component in 1:best_n_components
+#         component_indices = findall(assignments .== component)
+#         for individual in component_indices
+#             locations = findall(ids .== individual)
+#             scatter!(ax, timepoints_og, parameters[locations, 1], color=colors[component], markersize=8)
+#             scatter!(ax2, timepoints_og, parameters[locations, 2], color=colors[component], markersize=8)
+#             scatter!(ax3, timepoints_og, parameters[locations, 3], color=colors[component], markersize=8)
+#         end
+#     end
+#     f
+# end
 
 groups = vcat(fill("MIR", size(MIR_parameters, 2)), fill("LIR", size(LIR_parameters, 2)), fill("Healthy", size(healthy_parameters, 2)))
 

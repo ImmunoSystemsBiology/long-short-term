@@ -117,8 +117,8 @@ local_timepoints = [0.0, 30.0, 60.0, 90.0, 120.0]
 global_timepoints = [0.0, 6.0, 12.0, 18.0, 24.0, 30.0]
 
 # simulate MIR progressions
-n_LIR_progressions = n_MIR_progressions = n_healthy_progressions = 20
-filename = "data/mir_lir_simulations_final.jld2"
+n_LIR_progressions = n_MIR_progressions = n_healthy_progressions = 25
+filename = "data/mir_lir_simulations.jld2"
 Random.seed!(27052023)
 Dmeal = 75000.0
 
@@ -132,7 +132,7 @@ for patient_id in 1:n_MIR_progressions
     Gb = rand(Normal(5.5, 0.2)) # fasting glucose in mmol/L
     Ib = rand(Normal(15.0, 3.0)) # fasting insulin in μIU/mL
 
-    λ_k5 = max(0.0, rand(Normal(0.06, 0.06/2)))
+    λ_k5 = max(0.0, rand(Normal(0.07, 0.07/2)))
     λ_k9 = max(0.0, rand(Normal(0.001, 0.001/10)))
     Gb_rate = max(0.0, rand(Normal(0.05, 0.05/10)))
     Ib_rate = max(0.0, rand(Normal(0.05, 0.05/10)))
@@ -157,10 +157,10 @@ for patient_id in 1:n_LIR_progressions
 
     λ_k3 = max(0.0, rand(Normal(0.9, 0.9/10)))
     λ_k4 = max(0.0, rand(Normal(0.9, 0.9/10)))
-    λ_k5 = max(0.0, rand(Normal(0.01, 0.01)))
-    k1_rate = max(0.0, rand(Normal(3e-4, 3e-4/10)))
-    k6_rate = max(0.0, rand(Normal(4e-3, 4e-3/10)))
-    G_liv_b_rate = max(0.0, rand(Normal(0.08, 0.08/10)))
+    λ_k5 = max(0.0, rand(Normal(0.04, 0.04)))
+    k1_rate = max(0.0, rand(Normal(5e-4, 5e-4/10)))
+    k6_rate = max(0.0, rand(Normal(4e-2, 4e-3/10)))
+    G_liv_b_rate = max(0.0, rand(Normal(0.48, 0.08/10)))
     Gb_rate = max(0.0, rand(Normal(0.05, 0.05/10)))
     Ib_rate = max(0.0, rand(Normal(0.05, 0.05/10)))
     dynamic_noise = 0.05
