@@ -14,10 +14,10 @@ timepoints = [0.0, 6.0, 12.0, 18.0, 24.0, 30.0]
 
 # define model
 chain = Chain(
-    Dense(4, 6, tanh),
-    Dense(6, 6, tanh),
+    Dense(4, 8, Lux.softplus),
+    Dense(8, 8, Lux.softplus),
    # Dense(8, 8, tanh),
-    Dense(6, 3)
+    Dense(8, 3)
 )
 
 function neural_ode!(du, u, p, t, st)
@@ -39,7 +39,7 @@ function loss_nn(p, (chain, y, t, st))
         if size(predictions, 2) < size(y, 3)
             return Inf
         end
-        loss += sum(abs2, predictions - y[:, individual, :])
+        loss += sum(abs2, (predictions - y[:, individual, :]) ./ y[:, individual, :])
     end
     loss /= (size(y, 2) * size(y, 3))
      
@@ -121,12 +121,12 @@ save("figures/conditional_parameters_umap_node.png", figure_umap)
 using CairoMakie
 
 # save the conditional parameters to a JLD2 file
-jldsave("data/conditional_parameters_node.jld2", conditionals=conditionals, network=[Array(sol.u.network) for sol in neural_network_solutions])
+jldsave("data/conditional_parameters_node_rel_loss.jld2", conditionals=conditionals, network=[Array(sol.u.network) for sol in neural_network_solutions])
 
 # test the reliability of class separation based on conditional parameters
 
 # visualize the results
-conditional_parameters = conditionals[:,1]
+conditional_parameters = conditionals[:,9]
 
 figure_conditional_parameters = let f = Figure()
     ax = CairoMakie.Axis(f[1, 1], xlabel="Group", ylabel="Conditional parameter value", title="Conditional parameters",
@@ -149,9 +149,9 @@ end
 save("figures/conditional_parameters_boxplot_node_separation.png", figure_conditional_parameters)
 
 figure_reconstruction = let f = Figure(size=(500, 600))
-    ax1 = CairoMakie.Axis(f[1, 1], xlabel="Time (min)", ylabel="Value")
-    ax2 = CairoMakie.Axis(f[2, 1], xlabel="Time (min)", ylabel="Value")
-    ax3 = CairoMakie.Axis(f[3, 1], xlabel="Time (min)", ylabel="Value")
+    ax1 = CairoMakie.Axis(f[1, 1], xlabel="Time (y)", ylabel="Value")
+    ax2 = CairoMakie.Axis(f[2, 1], xlabel="Time (y)", ylabel="Value")
+    ax3 = CairoMakie.Axis(f[3, 1], xlabel="Time (y)", ylabel="Value")
 
     group_labels = ["MIR", "LIR", "Healthy"]
     group_positions = [1, 2, 3]
@@ -163,7 +163,7 @@ figure_reconstruction = let f = Figure(size=(500, 600))
     _, st = Lux.setup(rng, chain)
 
     timepoints_fine = range(0, stop=30, length=100)
-    for sol_2 in neural_network_solutions[[1]]
+    for sol_2 in neural_network_solutions[[9]]
         conditional_parameters = sol_2.u.conditionals
         for (i, individual) in enumerate(1:size(trajectory_parameters, 2))
             condition = conditional_parameters[i]
@@ -207,4 +207,4 @@ figure_reconstruction = let f = Figure(size=(500, 600))
     f
 end
 
-save("figures/reconstruction_conditional_node_flat.png", figure_reconstruction)
+save("figures/reconstruction_conditional_node_k5.png", figure_reconstruction)

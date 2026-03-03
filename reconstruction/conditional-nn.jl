@@ -161,9 +161,9 @@ end
 save("figures/conditional_parameters_boxplot_nn_bad_separation.png", figure_conditional_parameters)
 
 figure_reconstruction = let f = Figure(size=(500, 600))
-    ax1 = CairoMakie.Axis(f[1, 1], xlabel="Time (min)", ylabel="Value")
-    ax2 = CairoMakie.Axis(f[2, 1], xlabel="Time (min)", ylabel="Value")
-    ax3 = CairoMakie.Axis(f[3, 1], xlabel="Time (min)", ylabel="Value")
+    ax1 = CairoMakie.Axis(f[1, 1], xlabel="Time (y)", ylabel="Value")
+    ax2 = CairoMakie.Axis(f[2, 1], xlabel="Time (y)", ylabel="Value")
+    ax3 = CairoMakie.Axis(f[3, 1], xlabel="Time (y)", ylabel="Value")
 
     group_labels = ["MIR", "LIR", "Healthy"]
     group_positions = [1, 2, 3]
