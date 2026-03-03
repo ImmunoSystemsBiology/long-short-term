@@ -119,6 +119,7 @@ global_timepoints = [0.0, 6.0, 12.0, 18.0, 24.0, 30.0]
 # simulate MIR progressions
 n_LIR_progressions = n_MIR_progressions = n_healthy_progressions = 25
 filename = "data/mir_lir_simulations.jld2"
+filename_unseen = "data/mir_lir_simulations_unseen.jld2"
 Random.seed!(27052023)
 Dmeal = 75000.0
 
@@ -197,6 +198,97 @@ end
 
 # save to JLD2
 jldsave(filename, MIR_patients=MIR_patients, LIR_patients=LIR_patients, healthy_patients=healthy_patients)
+
+# also make a test set with unseen progressions
+n_unseen_progressions = 100
+
+unseen_MIR_patients = NamedTuple[]
+unseen_LIR_patients = NamedTuple[]
+unseen_healthy_patients = NamedTuple[]
+for patient_id in 1:n_unseen_progressions
+
+    weight_offset = cumsum(rand(Normal(2.0, 2.0), length(global_timepoints)))
+    weight_std = rand(InverseGamma(3.0, 4.0))
+    bw = [rand(Normal(70.0 + k, weight_std)) for k in weight_offset] # body weight in kg
+    Gb = rand(Normal(5.5, 0.2)) # fasting glucose in mmol/L
+    Ib = rand(Normal(15.0, 3.0)) # fasting insulin in μIU/mL
+
+    λ_k5 = max(0.0, rand(Normal(0.07, 0.07/2)))
+    λ_k9 = max(0.0, rand(Normal(0.001, 0.001/10)))
+    Gb_rate = max(0.0, rand(Normal(0.05, 0.05/10)))
+    Ib_rate = max(0.0, rand(Normal(0.05, 0.05/10)))
+    static_noise = 0.05
+    dynamic_noise = 0.05
+
+    global_number_of_timepoints = rand([2,3,4,5])
+    global_t_range = range(1.0, stop=30.0, length=1000)
+    select_global_t = sort(sample(global_t_range, global_number_of_timepoints; replace=false))
+    global_timepoints_unseen = [0.0; select_global_t]
+
+    result_MIR = MIR_progression(bw, Gb, Ib, Dmeal, local_timepoints, global_timepoints_unseen, λ_k5, λ_k9, Gb_rate, Ib_rate; static_noise=static_noise, dynamic_noise=dynamic_noise)
+
+    for (j, gt) in enumerate(global_timepoints_unseen)
+        push!(unseen_MIR_patients, (patient_id=patient_id, global_t=gt, bw=bw[j], local_t=local_timepoints, glucose=result_MIR[j, :, 1], insulin=result_MIR[j, :, 2]))
+    end
+end
+for patient_id in 1:n_unseen_progressions
+
+    weight_offset = cumsum(rand(Normal(2.0, 2.0), length(global_timepoints)))
+    weight_std = rand(InverseGamma(3.0, 4.0))
+    bw = [rand(Normal(70.0 + k, weight_std)) for k in weight_offset] # body weight in kg
+    Gb = rand(Normal(5.5, 0.2)) # fasting glucose in mmol/L
+    Ib = rand(Normal(15.0, 3.0)) # fasting insulin in μIU/mL
+
+    λ_k3 = max(0.0, rand(Normal(0.9, 0.9/10)))
+    λ_k4 = max(0.0, rand(Normal(0.9, 0.9/10)))
+    λ_k5 = max(0.0, rand(Normal(0.04, 0.04)))
+    k1_rate = max(0.0, rand(Normal(5e-4, 5e-4/10)))
+    k6_rate = max(0.0, rand(Normal(4e-2, 4e-3/10)))
+    G_liv_b_rate = max(0.0, rand(Normal(0.48, 0.08/10)))
+    Gb_rate = max(0.0, rand(Normal(0.05, 0.05/10)))
+    Ib_rate = max(0.0, rand(Normal(0.05, 0.05/10)))
+    dynamic_noise = 0.05
+
+    global_number_of_timepoints = rand([2,3,4,5])
+    global_t_range = range(1.0, stop=30.0, length=1000)
+    select_global_t = sort(sample(global_t_range, global_number_of_timepoints; replace=false))
+    global_timepoints_unseen = [0.0; select_global_t]
+
+    result_LIR = LIR_progression(bw, Gb, Ib, Dmeal, local_timepoints, global_timepoints_unseen, λ_k3, λ_k4, λ_k5, k1_rate, k6_rate, G_liv_b_rate, Gb_rate, Ib_rate; dynamic_noise=dynamic_noise)
+
+    for (j, gt) in enumerate(global_timepoints_unseen)
+        push!(unseen_LIR_patients, (patient_id=patient_id, global_t=gt, bw=bw[j], local_t=local_timepoints, glucose=result_LIR[j, :, 1], insulin=result_LIR[j, :, 2]))
+    end
+end
+for patient_id in 1:n_unseen_progressions
+
+    weight_offset = cumsum(rand(Normal(0.0, 2.0), length(global_timepoints)))
+    weight_std = rand(InverseGamma(3.0, 4.0))
+    bw = [rand(Normal(70.0 + k, weight_std)) for k in weight_offset] # body weight in kg
+    Gb = rand(Normal(5.5, 0.2)) # fasting glucose in mmol/L
+    Ib = rand(Normal(15.0, 3.0)) # fasting insulin in μIU/mL
+
+    λ_k5 = max(0.0, rand(Normal(0.005, 0.005)))
+    λ_k9 = 0.0
+    Gb_rate = max(0.0, rand(Normal(0.004, 0.004/10)))
+    Ib_rate = max(0.0, rand(Normal(0.04, 0.04/10)))
+    static_noise = 0.05
+    dynamic_noise = 0.05
+
+    global_number_of_timepoints = rand([2,3,4,5])
+    global_t_range = range(1.0, stop=30.0, length=1000)
+    select_global_t = sort(sample(global_t_range, global_number_of_timepoints; replace=false))
+    global_timepoints_unseen = [0.0; select_global_t]
+
+    result_healthy = MIR_progression(bw, Gb, Ib, Dmeal, local_timepoints, global_timepoints_unseen, λ_k5, λ_k9, Gb_rate, Ib_rate; static_noise=static_noise, dynamic_noise=dynamic_noise)
+
+    for (j, gt) in enumerate(global_timepoints_unseen)
+        push!(unseen_healthy_patients, (patient_id=patient_id, global_t=gt, bw=bw[j], local_t=local_timepoints, glucose=result_healthy[j, :, 1], insulin=result_healthy[j, :, 2]))
+    end
+end
+
+jldsave(filename_unseen, MIR_patients=unseen_MIR_patients, LIR_patients=unseen_LIR_patients, healthy_patients=unseen_healthy_patients)
+
 
 using CairoMakie
 

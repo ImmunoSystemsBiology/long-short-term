@@ -108,8 +108,8 @@ function lighten(c::Color, amount::Float64=0.1)
 end
 
 figure_prediction = let f = Figure()
-    ax_glucose = Axis(f[1, 1], xlabel = "Time (min)", ylabel = "Glucose (mmol/L)", title = "Glucose Prediction")
-    ax_insulin = Axis(f[2, 1], xlabel = "Time (min)", ylabel = "Insulin (μIU/mL)", title = "Insulin Prediction")
+    ax_glucose = CairoMakie.Axis(f[1, 1], xlabel = "Time (min)", ylabel = "Glucose (mmol/L)", title = "Glucose Prediction")
+    ax_insulin = CairoMakie.Axis(f[2, 1], xlabel = "Time (min)", ylabel = "Insulin (μIU/mL)", title = "Insulin Prediction")
 
     lines!(ax_glucose, patient.local_t[1]:0.1:patient.local_t[end], prediction[2, :], color = :blue, label = "Predicted")
     scatter!(ax_glucose, patient.local_t, patient.glucose, color = :red, label = "Observed")
@@ -126,6 +126,7 @@ end
 patient_id = 2
 patients_MIR = MIR_patients[[patient.patient_id == patient_id for patient in MIR_patients]]
 patients_LIR = LIR_patients[[patient.patient_id == patient_id for patient in LIR_patients]]
+patients_healthy = healthy_patients[[patient.patient_id == patient_id for patient in healthy_patients]]
 Dmeal = 75000.0
 parameter_values_MIR = [fit_edes(patient, Dmeal).u for patient in patients_MIR]
 transformed_MIR = exp.(hcat(parameter_values_MIR...))
@@ -133,17 +134,22 @@ transformed_MIR = exp.(hcat(parameter_values_MIR...))
 parameter_values_LIR = [fit_edes(patient, Dmeal).u for patient in patients_LIR]
 transformed_LIR = exp.(hcat(parameter_values_LIR...))
 
+parameter_values_healthy = [fit_edes(patient, Dmeal).u for patient in patients_healthy]
+transformed_healthy = exp.(hcat(parameter_values_healthy...))
+
 # plot parameter trajectory
-figure_trajectory = let f = Figure(size=(550,600), fonts=(;bold = "Noto Sans SemiBold", default="Noto Sans Light"))
+figure_trajectory = let f = Figure(size=(850,600), fonts=(;bold = "Noto Sans SemiBold", default="Noto Sans Light"))
 
     lir_color = colorant"#c74300"
     mir_color = colorant"#008aa1"
+    # purple for healthy
+    healthy_color = colorant"#228c22"
 
-    trajectories_grid = GridLayout(f[1,1])
+    trajectories_grid = GridLayout(f[2,1])
 
-    ax_k1 = Axis(trajectories_grid[1, 1], xlabel = "Time (days)", ylabel = "k1", title = "Distinct parameter trajectories", titlealign = :left, subtitle = "k₁ trajectory", titlesize=16)
-    ax_k5 = Axis(trajectories_grid[2, 1], xlabel = "Time (days)", ylabel = "k5", titlealign = :left, subtitle = "k₅ trajectory")
-    ax_k6 = Axis(trajectories_grid[3, 1], xlabel = "Time (days)", ylabel = "k6", titlealign = :left, subtitle = "k₆ trajectory")
+    ax_k1 = CairoMakie.Axis(trajectories_grid[1, 1], xlabel = "Time (years)",ylabel = "k1")
+    ax_k5 = CairoMakie.Axis(trajectories_grid[1, 2], xlabel = "Time (years)",ylabel = "k5", )
+    ax_k6 = CairoMakie.Axis(trajectories_grid[1, 3], xlabel = "Time (years)", ylabel = "k6")
 
     days = [patient.global_t for patient in patients_MIR]
 
@@ -155,11 +161,15 @@ figure_trajectory = let f = Figure(size=(550,600), fonts=(;bold = "Noto Sans Sem
     lines!(ax_k5, days, transformed_LIR[2, :], color = lir_color)
     lines!(ax_k6, days, transformed_LIR[3, :], color = lir_color)
 
-    Legend(trajectories_grid[4,1], ax_k1, "Insulin Resistance"; orientation = :horizontal)
+    lines!(ax_k1, days, transformed_healthy[1, :], color = healthy_color, label="Healthy")
+    lines!(ax_k5, days, transformed_healthy[2, :], color = healthy_color)
+    lines!(ax_k6, days, transformed_healthy[3, :], color = healthy_color)
 
-    data_grid = GridLayout(f[1,2])
-    ax_data_glucose = Axis(data_grid[1, 1], xlabel = "Time (min)", ylabel = "Glucose (mmol/L)", title = "Glucose data", titlealign = :left)
-    ax_data_insulin = Axis(data_grid[2, 1], xlabel = "Time (min)", ylabel = "Insulin (μIU/mL)", title = "Insulin data", titlealign = :left)
+    Legend(trajectories_grid[2,1:3], ax_k1, "Insulin Resistance"; orientation = :horizontal)
+
+    data_grid = GridLayout(f[1,1])
+    ax_data_glucose = CairoMakie.Axis(data_grid[1, 1], xlabel = "Time (min)", ylabel = "Glucose (mmol/L)", title = "Glucose data", titlealign = :left)
+    ax_data_insulin = CairoMakie.Axis(data_grid[1, 2], xlabel = "Time (min)", ylabel = "Insulin (μIU/mL)", title = "Insulin data", titlealign = :left)
 
     progression_color(c, n) = palette(lighten(c, 0.55), c, length(patients_MIR))[n]
     
@@ -177,9 +187,16 @@ figure_trajectory = let f = Figure(size=(550,600), fonts=(;bold = "Noto Sans Sem
         scatter!(ax_data_insulin, patient.local_t, patient.insulin, color = progression_color(lir_color, i), label = i == 1 ? "Liver" : "", markersize=6)
     end
 
+    for (i, patient) in enumerate(patients_healthy)
+        lines!(ax_data_glucose, patient.local_t, patient.glucose, color = progression_color(healthy_color, i), label = i == 1 ? "Healthy" : "")
+        scatter!(ax_data_glucose, patient.local_t, patient.glucose, color = progression_color(healthy_color, i), label = i == 1 ? "Healthy" : "", markersize=6)
+        lines!(ax_data_insulin, patient.local_t, patient.insulin, color = progression_color(healthy_color, i), label = i == 1 ? "Healthy" : "")
+        scatter!(ax_data_insulin, patient.local_t, patient.insulin, color = progression_color(healthy_color, i), label = i == 1 ? "Healthy" : "", markersize=6)
+    end
+
     # colorbar
     lightness_colormap = palette(lighten(colorant"gray", 0.45), colorant"gray", 100)
-    cb = Colorbar(data_grid[3,1], colormap = lightness_colormap, label = "Progression (days)", colorrange=(0,30), vertical=false)
+    cb = Colorbar(data_grid[1,3], colormap = lightness_colormap, label = "Progression (years)", colorrange=(0,30), vertical=true)
     #cb.ticksformat = x -> string(Int(x))
     
 
@@ -218,6 +235,24 @@ healthy_parameters = copy(MIR_parameters)
 end
 
 jldsave("data/parameter_trajectories.jld2", MIR_parameters=MIR_parameters, LIR_parameters=LIR_parameters, healthy_parameters=healthy_parameters)
+
+# fit unseen parameters
+MIR_unseen, LIR_unseen, healthy_unseen = jldopen("data/mir_lir_simulations_unseen.jld2", "r") do file
+    (file["MIR_patients"], file["LIR_patients"], file["healthy_patients"])
+end
+
+
+estimated_parameters = NamedTuple[]
+for (patients, category) in zip([MIR_unseen, LIR_unseen, healthy_unseen], ["MIR", "LIR", "Healthy"])
+    @showprogress for patient in patients
+        result = fit_edes(patient)
+        push!(estimated_parameters, (patient_id = patient.patient_id, category = category, global_t = patient.global_t, parameters = exp.(result.u)))
+    end
+end
+
+estimated_parameters[2]
+
+jldsave("data/estimated_parameters_unseen.jld2", estimated_parameters=estimated_parameters)
 
 MIR_parameters, LIR_parameters, healthy_parameters = jldopen("data/parameter_trajectories.jld2", "r") do file
     file["MIR_parameters"], file["LIR_parameters"], file["healthy_parameters"]

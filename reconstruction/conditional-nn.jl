@@ -9,13 +9,14 @@ end
 
 timepoints = [0.0, 6.0, 12.0, 18.0, 24.0, 30.0]
 
+softplus(x) = log1p(exp(x))
+
 # define model
 chain = SimpleChain(
     static(2),
-    TurboDense(relu, 16),
-    TurboDense(relu, 16),
-    TurboDense(relu, 16),
-    TurboDense(identity, 3)
+    TurboDense(softplus, 32),
+    TurboDense(softplus, 32),
+    TurboDense(softplus, 3)
 )
 
 # define loss function
@@ -26,7 +27,8 @@ function loss_nn(p, (chain, y, t))
         for (i, time) in enumerate(t)
             input = vcat(conditionals[individual], [time])
             pred = chain(input, p.network)
-            loss += sum(abs2, pred - y[:, individual, i])
+            # relative squared error
+            loss += sum(abs2, (pred - y[:, individual, i]) ./ y[:, individual, i])
         end
     end
     loss /= (size(y, 2) * size(y, 3))
@@ -39,7 +41,7 @@ trajectory_parameters = total_parameters[1:3,:,:]
 neural_network_solutions = SciMLBase.OptimizationSolution[]
 
 for i in 1:25
-    println("Run $i of 25")
+    println("Run $i of 10")
     initial_network = SimpleChains.init_params(chain)
     initial_conditionals = zeros(size(trajectory_parameters, 2))
     initial_params = ComponentArray((network = initial_network, conditionals = initial_conditionals))
@@ -73,7 +75,7 @@ for i in 1:25
 end
 
 conditionals = hcat([sol.u.conditionals for sol in neural_network_solutions]...)
-umap_result = UMAP.fit(conditionals', 2; n_neighbors=25, min_dist=2.5)
+umap_result = UMAP.fit(conditionals', 2; n_neighbors=10, min_dist=2.5)
 umap_result.embedding
 
 figure_umap = let f = Figure()
@@ -109,12 +111,12 @@ save("figures/conditional_parameters_umap_nn.png", figure_umap)
 using CairoMakie
 
 # save the conditional parameters to a JLD2 file
-jldsave("data/conditional_parameters_nn.jld2", conditionals=conditionals)
+jldsave("data/conditional_parameters_nn.jld2", conditionals=conditionals, network=[Array(sol.u.network) for sol in neural_network_solutions])
 
 # test the reliability of class separation based on conditional parameters
 
 # visualize the results
-conditional_parameters = conditionals[:,17]
+conditional_parameters = conditionals[:,14]
 
 figure_conditional_parameters = let f = Figure()
     ax = CairoMakie.Axis(f[1, 1], xlabel="Group", ylabel="Conditional parameter value", title="Conditional parameters",
@@ -136,7 +138,7 @@ end
 
 save("figures/conditional_parameters_boxplot_nn_good_separation.png", figure_conditional_parameters)
 
-conditional_parameters = conditionals[:,7]
+conditional_parameters = conditionals[:,4]
 
 figure_conditional_parameters = let f = Figure()
     ax = CairoMakie.Axis(f[1, 1], xlabel="Group", ylabel="Conditional parameter value", title="Conditional parameters",
@@ -171,7 +173,7 @@ figure_reconstruction = let f = Figure(size=(500, 600))
     healthy_color = colorant"#5c8a73"
 
     timepoints_fine = range(0, stop=30, length=100)
-    for sol_2 in neural_network_solutions[[10]]
+    for sol_2 in neural_network_solutions[[14]]
         conditional_parameters = sol_2.u.conditionals
         for (i, individual) in enumerate(1:size(trajectory_parameters, 2))
             condition = conditional_parameters[i]
