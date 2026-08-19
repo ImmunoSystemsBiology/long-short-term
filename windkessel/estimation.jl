@@ -11,7 +11,7 @@ const EST_LOWER_BOUNDS = [8.1757e-2, 3.1197e-2, 6.9006e-1, 1e-3]
 const EST_UPPER_BOUNDS = [1.7326e-1, 3.1464e-2, 1.1599 * 50, 2.1731]
 # Simulate dataset
 Qf(t) = 100.0 * sin(2π * t / 0.8) + 100.0
-Pvs = 75.0
+Pvs = 5.0
 t_long = 0:50
 t_meas = range(0.0, 8.0, step=1e-2)
 

@@ -32,8 +32,8 @@ y_obs = reshape(train_params, size(train_params,1)*size(train_params,2), size(tr
 y_obs_test = reshape(test_params, size(test_params,1)*size(test_params,2), size(test_params,3))[:,3:4]
 
 component_model = @component begin
-    y[1] ~ PolynomialRegression(2)
-    y[2] ~ PolynomialRegression(2)
+    y[1] ~ PolynomialRegression(1)
+    y[2] ~ PolynomialRegression(1)
 end
 
 nc = 3
@@ -46,6 +46,14 @@ t_obs_all = repeat(t_obs, inner=size(windkessel_est,1))
 y_obs_all = reshape(windkessel_est, size(windkessel_est,1)*size(windkessel_est,2), size(windkessel_est,3))[:,3:4]
 predicted_components = TemporalMixtureModels.posterior_responsibilities(result, t_obs_all, y_obs_all, ids)
 groups = [argmax(predicted_components[i,:]) for i in 1:size(predicted_components,1)]
+
+figure_alphas_per_group = let f = Figure(size=(600, 300))
+    ax = Axis(f[1, 1], xlabel="Group", ylabel="α")
+    boxplot!(ax, groups, alphas, color=Makie.wong_colors()[groups])
+    f
+end
+
+save("figures/windkessel_mixture_model_alphas_per_group.png", figure_alphas_per_group)
 
 windkessel_est
 predictions = predict(result, 0:50)
