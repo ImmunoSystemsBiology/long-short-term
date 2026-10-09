@@ -21,13 +21,3 @@ function adjusted_rand_index(cont_table::Matrix{Int})
     ari = float(index - expected_index) / float(max_index - expected_index)
     return ari
 end
-
-# Example usage:
-cont_table = [
-    94 3 3;
-    0 0 100; 
-    5 95 0
-]
-
-ari = adjusted_rand_index(cont_table)
-println("ARI = ", ari)
