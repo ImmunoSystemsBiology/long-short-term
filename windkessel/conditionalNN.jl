@@ -1,4 +1,3 @@
-# replication of Regazzoni et al. condNN experiment
 # reconstruct the long-scale trajectories of the pre-estimated Windkessel parameters with a conditional neural network
 using JLD2, Lux, ComponentArrays, Optimization, OptimizationOptimJL, OptimizationOptimisers, Zygote, ProgressMeter, LineSearches
 using StableRNGs, StatsBase, CairoMakie, UMAP
